@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 const crypto = require('crypto');
 
-const wss = new WebSocket.Server({ port: 8080 });
+const wss = new WebSocket.Server({ port: process.env.PORT || 8080 });
 const rooms = {};
 
 console.log("[ORACLE] Deterministic State Server is LIVE on port 8080");
