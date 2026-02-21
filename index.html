@@ -3,201 +3,171 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>0-Ping Oracle: Web3 Dash</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <title>0-Ping Oracle: Online</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-        
         body { margin: 0; padding: 0; background: #000; color: #fff; font-family: 'Press Start 2P', monospace; overflow: hidden; touch-action: none; }
         
-        .screen { position: relative; width: 100vw; height: 42vh; border-bottom: 2px solid #555; box-sizing: border-box; overflow: hidden; }
+        /* --- LOBBY UI --- */
+        #lobby-ui { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: #050505; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .title { color: #0ff; text-shadow: 4px 4px 0 #0055aa; font-size: 24px; margin-bottom: 40px; }
+        .btn-lobby { background: #111; border: 4px solid #fff; color: #fff; font-family: inherit; font-size: 16px; padding: 15px 30px; cursor: pointer; margin: 10px; width: 250px; text-transform: uppercase; }
+        .btn-lobby:active { background: #333; transform: translateY(4px); }
+        .input-lobby { background: #000; border: 4px solid #555; color: #ffcc00; font-family: inherit; font-size: 20px; padding: 15px; text-align: center; width: 212px; margin-bottom: 10px; text-transform: uppercase; }
+        #status-msg { color: #ff0055; margin-top: 20px; font-size: 10px; line-height: 1.5; }
+
+        /* --- GAME UI --- */
+        #game-ui { display: none; }
+        .screen { position: relative; width: 100vw; height: 50vh; border-bottom: 2px solid #555; box-sizing: border-box; overflow: hidden; }
         .p1-bg { background: linear-gradient(to bottom, #001133, #000); }
         .p2-bg { background: linear-gradient(to bottom, #330011, #000); }
-        
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        
-        .hud { position: absolute; top: 5px; width: 100%; padding: 0 10px; box-sizing: border-box; display: flex; justify-content: space-between; font-size: 8px; z-index: 10; text-shadow: 1px 1px 0 #000; pointer-events: none; }
+        .hud { position: absolute; top: 10px; width: 100%; padding: 0 15px; box-sizing: border-box; display: flex; justify-content: space-between; font-size: 10px; z-index: 10; text-shadow: 2px 2px 0 #000; pointer-events: none; }
         .p1-text { color: #0ff; } .p2-text { color: #ff0055; }
         .math-text { color: #ffcc00; text-align: center; }
         
-        .controls { position: absolute; bottom: 0; width: 100%; height: 40px; display: flex; }
-        .btn-left, .btn-right { flex: 1; height: 100%; border: none; font-family: 'Press Start 2P', monospace; font-size: 10px; color: #fff; text-shadow: 1px 1px 0 #000; cursor: pointer; opacity: 0.7; }
-        .btn-left:active, .btn-right:active { opacity: 1; transform: translateY(2px); }
-        
-        .p1-bg .btn-left { background: #0055aa; border-right: 2px solid #000; } .p1-bg .btn-right { background: #0088ff; }
-        .p2-bg .btn-left { background: #aa0033; border-right: 2px solid #000; } .p2-bg .btn-right { background: #ff3366; }
-        
-        /* The Oracle & Web3 Panel */
-        #oracle-center { position: absolute; top: 42vh; left: 0; width: 100%; height: 16vh; background: #111; z-index: 50; display: flex; align-items: center; justify-content: space-around; font-size: 8px; border-bottom: 2px solid #555; border-top: 2px solid #555; padding: 0 10px; box-sizing: border-box; }
-        
-        .web3-panel { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 45%; }
-        .ping-panel { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 45%; border-left: 1px solid #333; padding-left: 10px; }
-        
-        .btn-web3 { background: transparent; border: 1px solid #0f0; color: #0f0; padding: 5px; font-family: inherit; font-size: 8px; cursor: pointer; }
-        .btn-web3:active { background: rgba(0,255,0,0.2); }
-        
-        .crypto-log { font-size: 6px; color: #555; text-align: center; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-        
-        .slider-row { display: flex; align-items: center; gap: 5px; width: 100%; justify-content: space-between; }
-        input[type="range"] { flex: 1; height: 2px; }
-        
-        .alert { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); font-size: 14px; text-shadow: 2px 2px 0 #000; opacity: 0; z-index: 20; pointer-events: none; text-align: center; }
-        .p1-alert { color: #0ff; } .p2-alert { color: #ff0055; }
+        .controls { position: absolute; bottom: 0; width: 100%; height: 60px; display: flex; }
+        .btn-foot { flex: 1; height: 100%; border: none; font-family: inherit; font-size: 14px; color: #fff; text-shadow: 2px 2px 0 #000; cursor: pointer; opacity: 0.8; }
+        .btn-foot:active { opacity: 1; border-bottom: 0; }
+        .bg-l { background: #0055aa; border-right: 2px solid #000; } .bg-r { background: #0088ff; }
+        .alert { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); font-size: 18px; text-shadow: 2px 2px 0 #000; opacity: 0; z-index: 20; color: #f00; text-align: center; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <div class="screen p1-bg">
-        <div class="hud">
-            <div class="p1-text">P1 GHOST<br>0-Ping Feel</div>
-            <div class="math-text">FRAME OFFSET<br><span id="p1-offset">+0 Frames</span></div>
-            <div style="color:#ffcc00; text-align:right;">CHAIN<br>Verified</div>
-        </div>
-        <div id="alert-p1" class="alert p1-alert">STUMBLE!</div>
-        <div id="rollback-p1" class="alert" style="color:#f00; font-size:20px; top:50%;">ROLLBACK</div>
-        <canvas id="c-p1"></canvas>
-        <div class="controls">
-            <button class="btn-left" id="p1-l">L FOOT</button>
-            <button class="btn-right" id="p1-r">R FOOT</button>
-        </div>
+    <div id="lobby-ui">
+        <div class="title">0-PING ORACLE</div>
+        <button class="btn-lobby" id="btn-create">CREATE MATCH</button>
+        <div style="margin: 20px 0; color: #555;">- OR -</div>
+        <input type="text" id="input-code" class="input-lobby" placeholder="ENTER CODE" maxlength="4">
+        <button class="btn-lobby" id="btn-join" style="border-color: #ff0055; color: #ff0055;">JOIN MATCH</button>
+        <div id="status-msg">SYSTEM IDLE</div>
     </div>
 
-    <div id="oracle-center">
-        <div class="web3-panel">
-            <button class="btn-web3" id="btn-connect">CONNECT WALLET</button>
-            <div id="wallet-address" style="color:#aaa;">NOT CONNECTED</div>
-            <div class="crypto-log" id="crypto-log">Awaiting signatures...</div>
-        </div>
-        
-        <div class="ping-panel">
-            <div class="slider-row">
-                <span style="color:#0ff;">P1</span>
-                <input type="range" id="ping-p1" min="10" max="400" value="20">
-                <span id="ping-val-p1" style="color:#0ff; width:25px;">20ms</span>
+    <div id="game-ui">
+        <div class="screen p1-bg">
+            <div class="hud">
+                <div class="p1-text">YOU (GHOST)<br><span style="color:#fff">0-Ping</span></div>
+                <div class="math-text">NETWORK<br><span id="hud-ping-local" style="color:#0f0;">--ms</span></div>
             </div>
-            <div class="slider-row">
-                <span style="color:#ff0055;">P2</span>
-                <input type="range" id="ping-p2" min="10" max="400" value="250">
-                <span id="ping-val-p2" style="color:#ff0055; width:25px;">250ms</span>
+            <div id="alert-local" class="alert">ROLLBACK!</div>
+            <canvas id="c-local"></canvas>
+            <div class="controls">
+                <button class="btn-foot bg-l" id="btn-local-l">L FOOT</button>
+                <button class="btn-foot bg-r" id="btn-local-r">R FOOT</button>
             </div>
         </div>
-    </div>
 
-    <div class="screen p2-bg" style="top: 16vh;">
-        <div class="hud">
-            <div class="p2-text">P2 GHOST<br>0-Ping Feel</div>
-            <div class="math-text">FRAME OFFSET<br><span id="p2-offset">+0 Frames</span></div>
-            <div style="color:#ffcc00; text-align:right;">CHAIN<br>Verified</div>
-        </div>
-        <div id="alert-p2" class="alert p2-alert">STUMBLE!</div>
-        <div id="rollback-p2" class="alert" style="color:#f00; font-size:20px; top:50%;">ROLLBACK</div>
-        <canvas id="c-p2"></canvas>
-        <div class="controls">
-            <button class="btn-left" id="p2-l">L FOOT</button>
-            <button class="btn-right" id="p2-r">R FOOT</button>
+        <div class="screen p2-bg" style="top: 50vh; position: absolute;">
+            <div class="hud">
+                <div class="p2-text">OPPONENT<br><span style="color:#fff">Verified Chain</span></div>
+                <div class="math-text">NETWORK<br><span id="hud-ping-opp" style="color:#ff0055;">--ms</span></div>
+            </div>
+            <canvas id="c-opp"></canvas>
         </div>
     </div>
 
 <script>
+    // --- ENGINE VARS ---
     const FPS = 60; const FRAME_MS = 1000 / FPS;
     const BOOST = 12; const FRICTION = 0.94;
     
-    // Sliders
-    const sP1 = document.getElementById('ping-p1'); const vP1 = document.getElementById('ping-val-p1'); const offP1 = document.getElementById('p1-offset');
-    const sP2 = document.getElementById('ping-p2'); const vP2 = document.getElementById('ping-val-p2'); const offP2 = document.getElementById('p2-offset');
+    let localPlayer = { gX: 50, gV: 0, cX: 50, cV: 0, nextFoot: 'L', ctx: document.getElementById('c-local').getContext('2d'), alert: document.getElementById('alert-local'), color: '#0ff' };
+    let opponent = { cX: 50, cV: 0, q: [], ctx: document.getElementById('c-opp').getContext('2d'), color: '#ff0055' };
+    
+    let myRole = ''; let pingOffsetMs = 0; 
+    let isPlaying = false;
 
-    let p1 = { id: 1, ping: 20, gX: 50, gV: 0, cX: 50, cV: 0, q: [], nextFoot: 'L', ctx: document.getElementById('c-p1').getContext('2d'), alert: document.getElementById('alert-p1'), rollAlert: document.getElementById('rollback-p1'), color: '#0ff' };
-    let p2 = { id: 2, ping: 250, gX: 50, gV: 0, cX: 50, cV: 0, q: [], nextFoot: 'L', ctx: document.getElementById('c-p2').getContext('2d'), alert: document.getElementById('alert-p2'), rollAlert: document.getElementById('rollback-p2'), color: '#ff0055' };
-
-    // --- WEB3 SESSION KEY LOGIC ---
-    let sessionWallet = null;
-    const btnConnect = document.getElementById('btn-connect');
-    const walletText = document.getElementById('wallet-address');
-    const cryptoLog = document.getElementById('crypto-log');
-
-    btnConnect.addEventListener('click', async () => {
-        btnConnect.innerText = "CONNECTING...";
-        try {
-            // If they have MetaMask, connect it. Otherwise, create a temporary burner wallet.
-            if (window.ethereum) {
-                const provider = new ethers.BrowserProvider(window.ethereum);
-                const signer = await provider.getSigner();
-                const address = await signer.getAddress();
-                walletText.innerText = address.substring(0,6) + "..." + address.substring(38);
-                walletText.style.color = "#0f0";
-            } else {
-                walletText.innerText = "NO PROVIDER: USING BURNER";
-                walletText.style.color = "#ff8c00";
-            }
-            
-            // Generate the local, invisible Session Key to sign 60fps frames without popups!
-            sessionWallet = ethers.Wallet.createRandom();
-            btnConnect.innerText = "SESSION KEY ACTIVE";
-            btnConnect.style.borderColor = "#fff";
-            btnConnect.style.color = "#fff";
-            
-        } catch(e) {
-            console.error(e);
-            btnConnect.innerText = "ERROR";
-        }
+    // --- WEBSOCKET CONNECTION ---
+    // Change this to your live server URL once deployed (e.g., wss://my-oracle-server.onrender.com)
+    const socket = new WebSocket('ws://localhost:8080'); 
+    const statusMsg = document.getElementById('status-msg');
+    
+    socket.onopen = () => { statusMsg.innerText = "CONNECTED TO ORACLE."; statusMsg.style.color = "#0f0"; };
+    
+    // --- MATCHMAKING UI ---
+    document.getElementById('btn-create').addEventListener('click', () => {
+        socket.send(JSON.stringify({ type: 'CREATE' }));
+        statusMsg.innerText = "GENERATING SECURE ROOM...";
     });
 
-    async function signFrame(playerNum, action) {
-        if(!sessionWallet) return;
-        
-        let frame = Math.floor(Date.now() / FRAME_MS);
-        let message = `P${playerNum}_${action}_FRAME:${frame}`;
-        
-        // Cryptographically sign the input in the background (0-ping delay)
-        let signature = await sessionWallet.signMessage(message);
-        
-        // Display the raw blockchain hex on screen to prove it works
-        cryptoLog.innerText = `SIG: ${signature.substring(0, 30)}...`;
-        cryptoLog.style.color = playerNum === 1 ? '#0ff' : '#ff0055';
-    }
+    document.getElementById('btn-join').addEventListener('click', () => {
+        const code = document.getElementById('input-code').value.toUpperCase();
+        if(code.length !== 4) return alert("Code must be 4 characters.");
+        socket.send(JSON.stringify({ type: 'JOIN', code: code }));
+        statusMsg.innerText = "CONNECTING TO MATCH...";
+    });
 
+    // --- THE ORACLE HANDSHAKE ---
+    socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'ROOM_CREATED') {
+            myRole = 'p1';
+            statusMsg.innerHTML = `ROOM CODE: <span style="color:#fff; font-size:24px;">${data.code}</span><br><br>SEND THIS TO PLAYER 2...`;
+        }
+
+        if (data.type === 'START_PING_TEST') {
+            statusMsg.innerText = "HANDSHAKE: CALCULATING TOPOLOGY...";
+            // The Server asked for a ping echo. Send it immediately.
+            socket.send(JSON.stringify({ type: 'PING_ECHO', serverTime: Date.now() }));
+        }
+
+        if (data.type === 'MATCH_START') {
+            // The Oracle has calculated the math. Remove Lobby, Start Game.
+            document.getElementById('lobby-ui').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'block';
+            resize();
+
+            let myPing = myRole === 'p1' ? data.p1Ping : data.p2Ping;
+            let oppPing = myRole === 'p1' ? data.p2Ping : data.p1Ping;
+            
+            // Set network HUD
+            document.getElementById('hud-ping-local').innerText = `${myPing}ms`;
+            document.getElementById('hud-ping-opp').innerText = `${oppPing}ms`;
+            
+            // Calculate Rollback threshold based on ping
+            pingOffsetMs = myPing;
+            isPlaying = true;
+            loop(); // Ignite the physics engine
+        }
+
+        // --- IN-GAME ROUTING ---
+        if (data.type === 'OPPONENT_INPUT') {
+            // The Oracle relayed the opponent's validated move. Add it to the queue.
+            opponent.q.push({ t: Date.now(), action: data.action });
+        }
+    };
 
     function resize() {
-        p1.ctx.canvas.width = window.innerWidth; p1.ctx.canvas.height = window.innerHeight * 0.42;
-        p2.ctx.canvas.width = window.innerWidth; p2.ctx.canvas.height = window.innerHeight * 0.42;
+        if(!isPlaying) return;
+        localPlayer.ctx.canvas.width = window.innerWidth; localPlayer.ctx.canvas.height = window.innerHeight * 0.50;
+        opponent.ctx.canvas.width = window.innerWidth; opponent.ctx.canvas.height = window.innerHeight * 0.50;
     }
-    window.addEventListener('resize', resize); resize();
+    window.addEventListener('resize', resize);
 
-    function updatePingMath(p, sliderVal, valText, offText) {
-        p.ping = parseInt(sliderVal); valText.innerText = `${p.ping}ms`;
-        let oneWay = p.ping / 2; let frames = Math.ceil(oneWay / FRAME_MS);
-        offText.innerText = `+${frames} Frames`;
-    }
-    sP1.addEventListener('input', (e) => updatePingMath(p1, e.target.value, vP1, offP1));
-    sP2.addEventListener('input', (e) => updatePingMath(p2, e.target.value, vP2, offP2));
-    updatePingMath(p1, sP1.value, vP1, offP1); updatePingMath(p2, sP2.value, vP2, offP2);
-
-    // --- TRACK & FIELD MECHANIC ---
-    function handleFoot(e, p, foot) {
+    // --- GAMEPLAY MECHANICS ---
+    function handleFoot(e, foot) {
         if(e) e.preventDefault();
-        let now = Date.now();
+        if(!isPlaying) return;
         
-        if(foot === p.nextFoot) {
-            p.gV += BOOST; p.nextFoot = (foot === 'L') ? 'R' : 'L'; 
-            p.q.push({ t: now, action: 'RUN' }); 
-            signFrame(p.id, foot); // Sign the valid input
+        let frame = Math.floor(Date.now() / FRAME_MS);
+
+        if(foot === localPlayer.nextFoot) {
+            localPlayer.gV += BOOST; 
+            localPlayer.nextFoot = (foot === 'L') ? 'R' : 'L'; 
+            socket.send(JSON.stringify({ type: 'INPUT', action: 'RUN', frame: frame, hash: '0xHash' }));
         } else {
-            p.gV *= 0.2; 
-            p.alert.style.opacity = 1; setTimeout(() => p.alert.style.opacity = 0, 300);
-            p.q.push({ t: now, action: 'STUMBLE' }); 
-            signFrame(p.id, 'STUMBLE'); // Sign the invalid input
+            localPlayer.gV *= 0.2; 
+            localPlayer.alert.style.opacity = 1; setTimeout(() => localPlayer.alert.style.opacity = 0, 300);
+            socket.send(JSON.stringify({ type: 'INPUT', action: 'STUMBLE', frame: frame, hash: '0xHash' }));
         }
     }
 
-    document.getElementById('p1-l').addEventListener('touchstart', (e) => handleFoot(e, p1, 'L'));
-    document.getElementById('p1-l').addEventListener('mousedown', (e) => handleFoot(e, p1, 'L'));
-    document.getElementById('p1-r').addEventListener('touchstart', (e) => handleFoot(e, p1, 'R'));
-    document.getElementById('p1-r').addEventListener('mousedown', (e) => handleFoot(e, p1, 'R'));
-    
-    document.getElementById('p2-l').addEventListener('touchstart', (e) => handleFoot(e, p2, 'L'));
-    document.getElementById('p2-l').addEventListener('mousedown', (e) => handleFoot(e, p2, 'L'));
-    document.getElementById('p2-r').addEventListener('touchstart', (e) => handleFoot(e, p2, 'R'));
-    document.getElementById('p2-r').addEventListener('mousedown', (e) => handleFoot(e, p2, 'R'));
+    document.getElementById('btn-local-l').addEventListener('touchstart', (e) => handleFoot(e, 'L'));
+    document.getElementById('btn-local-l').addEventListener('mousedown', (e) => handleFoot(e, 'L'));
+    document.getElementById('btn-local-r').addEventListener('touchstart', (e) => handleFoot(e, 'R'));
+    document.getElementById('btn-local-r').addEventListener('mousedown', (e) => handleFoot(e, 'R'));
 
     function drawRunner(ctx, x, color, isGhost, speed) {
         ctx.fillStyle = color;
@@ -207,60 +177,54 @@
         let y = (ctx.canvas.height / 2);
         let bob = Math.sin(Date.now() / 80 * (speed/5)) * 5;
         
-        ctx.fillRect(x, y + bob, 15, 15); 
-        ctx.fillRect(x + 5, y + 15 + bob, 5, 20); 
+        ctx.fillRect(x, y + bob, 15, 15); ctx.fillRect(x + 5, y + 15 + bob, 5, 20); 
         
         let legSpread = Math.cos(Date.now() / 40 * (speed/5)) * 10;
-        ctx.fillRect(x + 5 - legSpread, y + 35 + bob, 5, 15); 
-        ctx.fillRect(x + 5 + legSpread, y + 35 + bob, 5, 15); 
+        ctx.fillRect(x + 5 - legSpread, y + 35 + bob, 5, 15); ctx.fillRect(x + 5 + legSpread, y + 35 + bob, 5, 15); 
         
         ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
     }
 
-    function updatePlayer(p) {
+    function loop() {
+        if(!isPlaying) return;
         let now = Date.now();
-        
-        // 1. BLOCKCHAIN ORACLE (VERIFIED STATE)
-        while(p.q.length > 0 && now - p.q[0].t >= p.ping) {
-            let verifiedInput = p.q.shift();
-            if(verifiedInput.action === 'RUN') p.cV += BOOST;
-            if(verifiedInput.action === 'STUMBLE') p.cV *= 0.2; 
+
+        // 1. PROCESS OPPONENT (VERIFIED CHAIN)
+        // Only apply their move if network time has passed (Simulating the Oracle sync)
+        while(opponent.q.length > 0) {
+            let oppInput = opponent.q.shift();
+            if(oppInput.action === 'RUN') opponent.cV += BOOST;
+            if(oppInput.action === 'STUMBLE') opponent.cV *= 0.2;
         }
-        p.cV *= FRICTION; p.cX += p.cV;
+        opponent.cV *= FRICTION; opponent.cX += opponent.cV;
 
-        // 2. GHOST (PREDICTIVE STATE)
-        p.gV *= FRICTION; p.gX += p.gV;
+        // 2. PROCESS LOCAL GHOST (0-PING)
+        localPlayer.gV *= FRICTION; localPlayer.gX += localPlayer.gV;
 
-        // 3. ROLLBACK NETCODE
-        let desync = p.gX - p.cX;
-        if(desync > 80 || desync < -20) {
-            p.rollAlert.style.opacity = 1; setTimeout(() => p.rollAlert.style.opacity = 0, 100);
-            p.gX = p.cX + 10; p.gV = p.cV;
-        }
+        // 3. CAMERA SCROLL (Tethered to whoever is winning to keep them on screen)
+        let camTarget = Math.max(localPlayer.gX, opponent.cX) > window.innerWidth / 2 ? Math.max(localPlayer.gX, opponent.cX) - (window.innerWidth / 2) : 0;
+        if(camTarget > 0) { localPlayer.gX -= camTarget; opponent.cX -= camTarget; }
 
-        let camTarget = p.cX > window.innerWidth / 3 ? p.cX - (window.innerWidth / 3) : 0;
-        if(camTarget > 0) { p.cX -= camTarget; p.gX -= camTarget; }
-
-        p.ctx.clearRect(0, 0, p.ctx.canvas.width, p.ctx.canvas.height);
-        
-        p.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        // 4. RENDER LOCAL
+        localPlayer.ctx.clearRect(0, 0, localPlayer.ctx.canvas.width, localPlayer.ctx.canvas.height);
+        localPlayer.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
         for(let i=0; i<10; i++) {
             let lx = ((Date.now() / 2) + (i * 80)) % window.innerWidth;
-            p.ctx.fillRect(window.innerWidth - lx, p.ctx.canvas.height/2 + 50, 4, 15);
+            localPlayer.ctx.fillRect(window.innerWidth - lx, localPlayer.ctx.canvas.height/2 + 50, 4, 15);
         }
+        drawRunner(localPlayer.ctx, localPlayer.gX, localPlayer.color, true, localPlayer.gV);
 
-        drawRunner(p.ctx, p.gX, p.color, true, p.gV); 
-        drawRunner(p.ctx, p.cX, '#ffcc00', false, p.cV); 
-
-        if(p.gX > p.cX + 5) {
-            p.ctx.strokeStyle = 'rgba(255,0,0,0.5)'; p.ctx.setLineDash([4, 4]); p.ctx.lineWidth = 2;
-            p.ctx.beginPath(); p.ctx.moveTo(p.cX + 10, p.ctx.canvas.height/2 + 60); p.ctx.lineTo(p.gX + 10, p.ctx.canvas.height/2 + 60); p.ctx.stroke(); p.ctx.setLineDash([]);
+        // 5. RENDER OPPONENT
+        opponent.ctx.clearRect(0, 0, opponent.ctx.canvas.width, opponent.ctx.canvas.height);
+        opponent.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        for(let i=0; i<10; i++) {
+            let lx = ((Date.now() / 2) + (i * 80)) % window.innerWidth;
+            opponent.ctx.fillRect(window.innerWidth - lx, opponent.ctx.canvas.height/2 + 50, 4, 15);
         }
+        drawRunner(opponent.ctx, opponent.cX, opponent.color, false, opponent.cV);
+
+        requestAnimationFrame(loop);
     }
-
-    function loop() {
-        updatePlayer(p1); updatePlayer(p2); requestAnimationFrame(loop);
-    } loop();
 </script>
 </body>
 </html>
