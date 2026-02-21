@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>0-Ping Oracle: Rollback Dash</title>
+    <title>0-Ping Oracle: Web3 Dash</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
         
@@ -19,7 +20,6 @@
         .p1-text { color: #0ff; } .p2-text { color: #ff0055; }
         .math-text { color: #ffcc00; text-align: center; }
         
-        /* The Arcade Controls */
         .controls { position: absolute; bottom: 0; width: 100%; height: 40px; display: flex; }
         .btn-left, .btn-right { flex: 1; height: 100%; border: none; font-family: 'Press Start 2P', monospace; font-size: 10px; color: #fff; text-shadow: 1px 1px 0 #000; cursor: pointer; opacity: 0.7; }
         .btn-left:active, .btn-right:active { opacity: 1; transform: translateY(2px); }
@@ -27,11 +27,19 @@
         .p1-bg .btn-left { background: #0055aa; border-right: 2px solid #000; } .p1-bg .btn-right { background: #0088ff; }
         .p2-bg .btn-left { background: #aa0033; border-right: 2px solid #000; } .p2-bg .btn-right { background: #ff3366; }
         
-        /* Center Oracle Panel */
-        #oracle-center { position: absolute; top: 42vh; left: 0; width: 100%; height: 16vh; background: #111; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 8px; border-bottom: 2px solid #555; border-top: 2px solid #555; }
+        /* The Oracle & Web3 Panel */
+        #oracle-center { position: absolute; top: 42vh; left: 0; width: 100%; height: 16vh; background: #111; z-index: 50; display: flex; align-items: center; justify-content: space-around; font-size: 8px; border-bottom: 2px solid #555; border-top: 2px solid #555; padding: 0 10px; box-sizing: border-box; }
         
-        .slider-row { display: flex; align-items: center; gap: 10px; margin: 5px 0; width: 90%; max-width: 400px; justify-content: space-between; }
-        input[type="range"] { flex: 1; }
+        .web3-panel { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 45%; }
+        .ping-panel { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 45%; border-left: 1px solid #333; padding-left: 10px; }
+        
+        .btn-web3 { background: transparent; border: 1px solid #0f0; color: #0f0; padding: 5px; font-family: inherit; font-size: 8px; cursor: pointer; }
+        .btn-web3:active { background: rgba(0,255,0,0.2); }
+        
+        .crypto-log { font-size: 6px; color: #555; text-align: center; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+        
+        .slider-row { display: flex; align-items: center; gap: 5px; width: 100%; justify-content: space-between; }
+        input[type="range"] { flex: 1; height: 2px; }
         
         .alert { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); font-size: 14px; text-shadow: 2px 2px 0 #000; opacity: 0; z-index: 20; pointer-events: none; text-align: center; }
         .p1-alert { color: #0ff; } .p2-alert { color: #ff0055; }
@@ -55,16 +63,23 @@
     </div>
 
     <div id="oracle-center">
-        <div style="color:#fff; margin-bottom:5px;">DETERMINISTIC ORACLE SETTINGS</div>
-        <div class="slider-row">
-            <span style="color:#0ff;">P1 PING</span>
-            <input type="range" id="ping-p1" min="10" max="400" value="20">
-            <span id="ping-val-p1" style="color:#0ff; width:30px;">20ms</span>
+        <div class="web3-panel">
+            <button class="btn-web3" id="btn-connect">CONNECT WALLET</button>
+            <div id="wallet-address" style="color:#aaa;">NOT CONNECTED</div>
+            <div class="crypto-log" id="crypto-log">Awaiting signatures...</div>
         </div>
-        <div class="slider-row">
-            <span style="color:#ff0055;">P2 PING</span>
-            <input type="range" id="ping-p2" min="10" max="400" value="250">
-            <span id="ping-val-p2" style="color:#ff0055; width:30px;">250ms</span>
+        
+        <div class="ping-panel">
+            <div class="slider-row">
+                <span style="color:#0ff;">P1</span>
+                <input type="range" id="ping-p1" min="10" max="400" value="20">
+                <span id="ping-val-p1" style="color:#0ff; width:25px;">20ms</span>
+            </div>
+            <div class="slider-row">
+                <span style="color:#ff0055;">P2</span>
+                <input type="range" id="ping-p2" min="10" max="400" value="250">
+                <span id="ping-val-p2" style="color:#ff0055; width:25px;">250ms</span>
+            </div>
         </div>
     </div>
 
@@ -94,6 +109,54 @@
     let p1 = { id: 1, ping: 20, gX: 50, gV: 0, cX: 50, cV: 0, q: [], nextFoot: 'L', ctx: document.getElementById('c-p1').getContext('2d'), alert: document.getElementById('alert-p1'), rollAlert: document.getElementById('rollback-p1'), color: '#0ff' };
     let p2 = { id: 2, ping: 250, gX: 50, gV: 0, cX: 50, cV: 0, q: [], nextFoot: 'L', ctx: document.getElementById('c-p2').getContext('2d'), alert: document.getElementById('alert-p2'), rollAlert: document.getElementById('rollback-p2'), color: '#ff0055' };
 
+    // --- WEB3 SESSION KEY LOGIC ---
+    let sessionWallet = null;
+    const btnConnect = document.getElementById('btn-connect');
+    const walletText = document.getElementById('wallet-address');
+    const cryptoLog = document.getElementById('crypto-log');
+
+    btnConnect.addEventListener('click', async () => {
+        btnConnect.innerText = "CONNECTING...";
+        try {
+            // If they have MetaMask, connect it. Otherwise, create a temporary burner wallet.
+            if (window.ethereum) {
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                const signer = await provider.getSigner();
+                const address = await signer.getAddress();
+                walletText.innerText = address.substring(0,6) + "..." + address.substring(38);
+                walletText.style.color = "#0f0";
+            } else {
+                walletText.innerText = "NO PROVIDER: USING BURNER";
+                walletText.style.color = "#ff8c00";
+            }
+            
+            // Generate the local, invisible Session Key to sign 60fps frames without popups!
+            sessionWallet = ethers.Wallet.createRandom();
+            btnConnect.innerText = "SESSION KEY ACTIVE";
+            btnConnect.style.borderColor = "#fff";
+            btnConnect.style.color = "#fff";
+            
+        } catch(e) {
+            console.error(e);
+            btnConnect.innerText = "ERROR";
+        }
+    });
+
+    async function signFrame(playerNum, action) {
+        if(!sessionWallet) return;
+        
+        let frame = Math.floor(Date.now() / FRAME_MS);
+        let message = `P${playerNum}_${action}_FRAME:${frame}`;
+        
+        // Cryptographically sign the input in the background (0-ping delay)
+        let signature = await sessionWallet.signMessage(message);
+        
+        // Display the raw blockchain hex on screen to prove it works
+        cryptoLog.innerText = `SIG: ${signature.substring(0, 30)}...`;
+        cryptoLog.style.color = playerNum === 1 ? '#0ff' : '#ff0055';
+    }
+
+
     function resize() {
         p1.ctx.canvas.width = window.innerWidth; p1.ctx.canvas.height = window.innerHeight * 0.42;
         p2.ctx.canvas.width = window.innerWidth; p2.ctx.canvas.height = window.innerHeight * 0.42;
@@ -114,27 +177,23 @@
         if(e) e.preventDefault();
         let now = Date.now();
         
-        // Did they press the correct foot?
         if(foot === p.nextFoot) {
-            // SUCCESS! Ghost moves instantly (0-ping)
-            p.gV += BOOST;
-            p.nextFoot = (foot === 'L') ? 'R' : 'L'; // Alternate
-            p.q.push({ t: now, action: 'RUN' }); // Send valid run to blockchain
+            p.gV += BOOST; p.nextFoot = (foot === 'L') ? 'R' : 'L'; 
+            p.q.push({ t: now, action: 'RUN' }); 
+            signFrame(p.id, foot); // Sign the valid input
         } else {
-            // STUMBLE! Ghost incorrectly assumed they would succeed, but local state knows they failed.
-            p.gV *= 0.2; // Massive speed drop
+            p.gV *= 0.2; 
             p.alert.style.opacity = 1; setTimeout(() => p.alert.style.opacity = 0, 300);
-            p.q.push({ t: now, action: 'STUMBLE' }); // Send stumble to blockchain
+            p.q.push({ t: now, action: 'STUMBLE' }); 
+            signFrame(p.id, 'STUMBLE'); // Sign the invalid input
         }
     }
 
-    // P1 Controls
     document.getElementById('p1-l').addEventListener('touchstart', (e) => handleFoot(e, p1, 'L'));
     document.getElementById('p1-l').addEventListener('mousedown', (e) => handleFoot(e, p1, 'L'));
     document.getElementById('p1-r').addEventListener('touchstart', (e) => handleFoot(e, p1, 'R'));
     document.getElementById('p1-r').addEventListener('mousedown', (e) => handleFoot(e, p1, 'R'));
     
-    // P2 Controls
     document.getElementById('p2-l').addEventListener('touchstart', (e) => handleFoot(e, p2, 'L'));
     document.getElementById('p2-l').addEventListener('mousedown', (e) => handleFoot(e, p2, 'L'));
     document.getElementById('p2-r').addEventListener('touchstart', (e) => handleFoot(e, p2, 'R'));
@@ -146,15 +205,14 @@
         else { ctx.shadowBlur = 0; ctx.globalAlpha = 1.0; }
         
         let y = (ctx.canvas.height / 2);
-        // Bobbing based on speed
         let bob = Math.sin(Date.now() / 80 * (speed/5)) * 5;
         
-        ctx.fillRect(x, y + bob, 15, 15); // Head
-        ctx.fillRect(x + 5, y + 15 + bob, 5, 20); // Body
+        ctx.fillRect(x, y + bob, 15, 15); 
+        ctx.fillRect(x + 5, y + 15 + bob, 5, 20); 
         
         let legSpread = Math.cos(Date.now() / 40 * (speed/5)) * 10;
-        ctx.fillRect(x + 5 - legSpread, y + 35 + bob, 5, 15); // L Leg
-        ctx.fillRect(x + 5 + legSpread, y + 35 + bob, 5, 15); // R Leg
+        ctx.fillRect(x + 5 - legSpread, y + 35 + bob, 5, 15); 
+        ctx.fillRect(x + 5 + legSpread, y + 35 + bob, 5, 15); 
         
         ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
     }
@@ -162,8 +220,7 @@
     function updatePlayer(p) {
         let now = Date.now();
         
-        // --- 1. BLOCKCHAIN ORACLE (VERIFIED STATE) ---
-        // Processes input only after Network Latency has passed
+        // 1. BLOCKCHAIN ORACLE (VERIFIED STATE)
         while(p.q.length > 0 && now - p.q[0].t >= p.ping) {
             let verifiedInput = p.q.shift();
             if(verifiedInput.action === 'RUN') p.cV += BOOST;
@@ -171,38 +228,30 @@
         }
         p.cV *= FRICTION; p.cX += p.cV;
 
-        // --- 2. THE GHOST (PREDICTIVE STATE) ---
+        // 2. GHOST (PREDICTIVE STATE)
         p.gV *= FRICTION; p.gX += p.gV;
 
-        // --- 3. ROLLBACK NETCODE CORRECTION ---
+        // 3. ROLLBACK NETCODE
         let desync = p.gX - p.cX;
-        
-        // If they Stumbled, the Ghost probably ran way ahead. 
-        // If the Ping is high, the server eventually verifies the stumble and snaps the ghost back.
         if(desync > 80 || desync < -20) {
             p.rollAlert.style.opacity = 1; setTimeout(() => p.rollAlert.style.opacity = 0, 100);
-            p.gX = p.cX + 10; // Snap Reality
-            p.gV = p.cV;
+            p.gX = p.cX + 10; p.gV = p.cV;
         }
 
-        // Camera Scroll
         let camTarget = p.cX > window.innerWidth / 3 ? p.cX - (window.innerWidth / 3) : 0;
         if(camTarget > 0) { p.cX -= camTarget; p.gX -= camTarget; }
 
-        // --- 4. RENDER ---
         p.ctx.clearRect(0, 0, p.ctx.canvas.width, p.ctx.canvas.height);
         
-        // Draw Track Lines moving backwards
         p.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
         for(let i=0; i<10; i++) {
             let lx = ((Date.now() / 2) + (i * 80)) % window.innerWidth;
             p.ctx.fillRect(window.innerWidth - lx, p.ctx.canvas.height/2 + 50, 4, 15);
         }
 
-        drawRunner(p.ctx, p.gX, p.color, true, p.gV); // Local Ghost
-        drawRunner(p.ctx, p.cX, '#ffcc00', false, p.cV); // Verified Chain
+        drawRunner(p.ctx, p.gX, p.color, true, p.gV); 
+        drawRunner(p.ctx, p.cX, '#ffcc00', false, p.cV); 
 
-        // Desync Tether
         if(p.gX > p.cX + 5) {
             p.ctx.strokeStyle = 'rgba(255,0,0,0.5)'; p.ctx.setLineDash([4, 4]); p.ctx.lineWidth = 2;
             p.ctx.beginPath(); p.ctx.moveTo(p.cX + 10, p.ctx.canvas.height/2 + 60); p.ctx.lineTo(p.gX + 10, p.ctx.canvas.height/2 + 60); p.ctx.stroke(); p.ctx.setLineDash([]);
