@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>0-Ping Oracle Simulator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        body { margin: 0; padding: 0; background: #000; color: #fff; font-family: 'Press Start 2P', monospace; overflow: hidden; touch-action: manipulation; }
+        
+        .screen { position: relative; width: 100vw; height: 50vh; border-bottom: 4px solid #fff; box-sizing: border-box; overflow: hidden; }
+        .p1-bg { background: linear-gradient(to bottom, #001133, #000); }
+        .p2-bg { background: linear-gradient(to bottom, #330011, #000); }
+        
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        
+        .hud { position: absolute; top: 10px; width: 100%; padding: 0 15px; box-sizing: border-box; display: flex; justify-content: space-between; font-size: 10px; z-index: 10; text-shadow: 2px 2px 0 #000; pointer-events: none; }
+        .p1-text { color: #0ff; } .p2-text { color: #ff0055; }
+        .chain-text { color: #ffcc00; text-align: right; }
+        
+        .tap-zone { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; display: flex; align-items: center; justify-content: center; opacity: 0.1; font-size: 24px; transition: opacity 0.1s; }
+        .tap-zone:active { opacity: 0.3; background: rgba(255,255,255,0.2); }
+        
+        .rollback-warning { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #f00; font-size: 20px; text-shadow: 2px 2px 0 #000; opacity: 0; z-index: 20; pointer-events: none; }
+        
+        /* The Absolute Truth Line */
+        #blockchain-center { position: absolute; top: 49.5vh; left: 0; width: 100%; height: 1vh; background: #ffcc00; z-index: 50; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #000; }
+    </style>
+</head>
+<body>
+
+    <div class="screen p1-bg">
+        <div class="hud">
+            <div class="p1-text">P1 GHOST<br>0-Ping (Predicted)</div>
+            <div class="chain-text">BLOCKCHAIN<br>20ms Latency</div>
+        </div>
+        <div id="warn-p1" class="rollback-warning">ROLLBACK!</div>
+        <canvas id="c-p1"></canvas>
+        <div class="tap-zone" id="tap-p1">TAP HERE (P1)</div>
+    </div>
+
+    <div id="blockchain-center">IMMUTABLE BLOCKCHAIN LEDGER</div>
+
+    <div class="screen p2-bg">
+        <div class="hud">
+            <div class="p2-text">P2 GHOST<br>0-Ping (Predicted)</div>
+            <div class="chain-text">BLOCKCHAIN<br>300ms Latency</div>
+        </div>
+        <div id="warn-p2" class="rollback-warning">ROLLBACK!</div>
+        <canvas id="c-p2"></canvas>
+        <div class="tap-zone" id="tap-p2">TAP HERE (P2)</div>
+    </div>
+
+<script>
+    // Engine Config
+    const BOOST = 15; const FRICTION = 0.92;
+    const P1_LATENCY = 20;   // Excellent connection
+    const P2_LATENCY = 300;  // Terrible connection
+    
+    // Player Objects [Ghost, Chain, InputQueue, Timestamps, CanvasCtx]
+    let p1 = { gX: 50, gV: 0, cX: 50, cV: 0, q: [], taps: [], ctx: document.getElementById('c-p1').getContext('2d'), warn: document.getElementById('warn-p1'), color: '#0ff' };
+    let p2 = { gX: 50, gV: 0, cX: 50, cV: 0, q: [], taps: [], ctx: document.getElementById('c-p2').getContext('2d'), warn: document.getElementById('warn-p2'), color: '#ff0055' };
+
+    function resize() {
+        p1.ctx.canvas.width = window.innerWidth; p1.ctx.canvas.height = window.innerHeight / 2;
+        p2.ctx.canvas.width = window.innerWidth; p2.ctx.canvas.height = window.innerHeight / 2;
+    }
+    window.addEventListener('resize', resize); resize();
+
+    function handleInput(e, player) {
+        if(e) e.preventDefault();
+        let now = Date.now();
+        // 1. Ghost moves instantly (0-ping)
+        player.gV += BOOST;
+        // 2. Predictor tracks rhythm
+        player.taps.push(now);
+        // 3. Send cryptographic frame to blockchain
+        player.q.push(now);
+    }
+
+    document.getElementById('tap-p1').addEventListener('touchstart', (e) => handleInput(e, p1));
+    document.getElementById('tap-p1').addEventListener('mousedown', (e) => handleInput(e, p1));
+    document.getElementById('tap-p2').addEventListener('touchstart', (e) => handleInput(e, p2));
+    document.getElementById('tap-p2').addEventListener('mousedown', (e) => handleInput(e, p2));
+
+    function triggerRollback(player) {
+        player.warn.style.opacity = 1;
+        setTimeout(() => player.warn.style.opacity = 0, 300);
+    }
+
+    function drawRunner(ctx, x, color, isGhost) {
+        ctx.fillStyle = color;
+        if(isGhost) { ctx.shadowBlur = 15; ctx.shadowColor = color; ctx.globalAlpha = 0.6; } 
+        else { ctx.shadowBlur = 0; ctx.globalAlpha = 1.0; }
+        
+        let y = (ctx.canvas.height / 2) + 20;
+        let bob = Math.sin(Date.now() / 100) * 4;
+        
+        ctx.fillRect(x, y + bob, 15, 15); // Head
+        ctx.fillRect(x + 5, y + 15 + bob, 5, 20); // Body
+        ctx.fillRect(x, y + 35 + bob, 15, 5); // Feet
+        
+        ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
+    }
+
+    function updatePlayer(p, latency) {
+        let now = Date.now();
+        
+        // BLOCKCHAIN (Verified State)
+        while(p.q.length > 0 && now - p.q[0] >= latency) {
+            p.q.shift(); p.cV += BOOST; 
+        }
+        p.cV *= FRICTION; p.cX += p.cV;
+
+        // GHOST (Predicted State)
+        p.gV *= FRICTION; p.gX += p.gV;
+
+        // ROLLBACK CHECK (If prediction outruns reality by too much)
+        let desync = p.gX - p.cX;
+        if(desync > 150) {
+            triggerRollback(p);
+            p.gX = p.cX + 20; // Snap Ghost back to reality
+            p.gV = p.cV;
+        }
+
+        // Camera Scroll
+        let camTarget = p.cX > window.innerWidth / 3 ? p.cX - (window.innerWidth / 3) : 0;
+        if(camTarget > 0) { p.cX -= camTarget; p.gX -= camTarget; }
+
+        // Render
+        p.ctx.clearRect(0, 0, p.ctx.canvas.width, p.ctx.canvas.height);
+        
+        // Draw Track lines
+        p.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        for(let i=0; i<20; i++) {
+            let lx = ((Date.now() / 2) + (i * 50)) % window.innerWidth;
+            p.ctx.fillRect(window.innerWidth - lx, p.ctx.canvas.height/2 + 35, 2, 20);
+        }
+
+        drawRunner(p.ctx, p.gX, p.color, true); // Local Prediction
+        drawRunner(p.ctx, p.cX, '#ffcc00', false); // Verified Chain
+
+        // Desync Rubberband
+        if(p.gX > p.cX + 15) {
+            p.ctx.strokeStyle = 'rgba(255,0,0,0.5)'; p.ctx.setLineDash([5, 5]);
+            p.ctx.beginPath(); p.ctx.moveTo(p.cX + 10, p.ctx.canvas.height/2 + 45); p.ctx.lineTo(p.gX + 10, p.ctx.canvas.height/2 + 45); p.ctx.stroke(); p.ctx.setLineDash([]);
+        }
+    }
+
+    function loop() {
+        updatePlayer(p1, P1_LATENCY);
+        updatePlayer(p2, P2_LATENCY);
+        requestAnimationFrame(loop);
+    }
+    loop();
+</script>
+</body>
+</html>
