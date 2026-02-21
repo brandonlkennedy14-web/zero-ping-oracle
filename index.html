@@ -99,7 +99,7 @@
     });
 
     // --- THE ORACLE HANDSHAKE ---
-    socket.onmessage = (event) => {
+    const socket = new WebSocket('wss://zero-ping-oracle.onrender.com'); => {
         const data = JSON.parse(event.data);
 
         if (data.type === 'ROOM_CREATED') {
