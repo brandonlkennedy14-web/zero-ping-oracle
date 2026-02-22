@@ -69,7 +69,7 @@
 
 <script>
     // ==========================================
-    // 1. ENGINE CLASSES (Netcode & Game Logic)
+    // 1. ENGINE CLASSES (Netcode & Pure Ledger Logic)
     // ==========================================
     class RollbackNetcode {
         constructor() {
@@ -84,7 +84,7 @@
         }
     }
 
-    const FINISH_LINE_DISTANCE = 10000;
+    const RACE_DURATION_FRAMES = 600; // 10 seconds at 60fps
 
     class SprintGame {
         constructor(netcodeEngine) {
@@ -93,8 +93,9 @@
             
             this.state = {
                 frame: 0,
-                p1: { x: 50, v: 0, nextFoot: 'L', color: '#0ff' },
-                p2: { x: 50, v: 0, nextFoot: 'L', color: '#ff0055' },
+                // Score is the pure integer ledger. v and x are just for visual juice.
+                p1: { score: 0, x: 50, v: 0, nextFoot: 'L', color: '#0ff' },
+                p2: { score: 0, x: 50, v: 0, nextFoot: 'L', color: '#ff0055' },
                 winner: null
             };
 
@@ -105,19 +106,20 @@
 
         startMatch() {
             this.isActive = true;
-            this.state.frame = this.netcode.getSyncedFrame();
+            this.state.frame = 0; // Reset frame counter for strictly timed match
         }
 
         processInput(playerKey, action) {
             let p = this.state[playerKey];
             if (action === 'L' || action === 'R') {
                 if (action === p.nextFoot) {
-                    p.v += this.BOOST;
+                    p.score += 1; // Immutable ledger point
+                    p.v += this.BOOST; // Visual feedback
                     p.nextFoot = (action === 'L') ? 'R' : 'L';
-                    return true; // Success
+                    return true;
                 } else {
-                    p.v *= this.STUMBLE_PENALTY;
-                    return false; // Stumble
+                    p.v *= this.STUMBLE_PENALTY; // Visual penalty
+                    return false; 
                 }
             }
         }
@@ -125,34 +127,44 @@
         step() {
             if (!this.isActive) return;
             this.state.frame++;
+            
+            // Visual smoothing for the canvas
             this.state.p1.v *= this.FRICTION;
             this.state.p1.x += this.state.p1.v;
             this.state.p2.v *= this.FRICTION;
             this.state.p2.x += this.state.p2.v;
-            this.checkWinCondition();
+
+            // Strict time-based resolution
+            if (this.state.frame >= RACE_DURATION_FRAMES) {
+                this.resolveMatch();
+            }
         }
 
-        checkWinCondition() {
-            let p1Finished = this.state.p1.x >= FINISH_LINE_DISTANCE;
-            let p2Finished = this.state.p2.x >= FINISH_LINE_DISTANCE;
-
-            if (p1Finished || p2Finished) {
-                this.isActive = false;
-                if (p1Finished && p2Finished) {
-                    this.state.winner = this.state.p1.v > this.state.p2.v ? 'p1' : 'p2';
-                } else {
-                    this.state.winner = p1Finished ? 'p1' : 'p2';
-                }
-                this.triggerEndGame();
+        resolveMatch() {
+            this.isActive = false;
+            if (this.state.p1.score > this.state.p2.score) {
+                this.state.winner = 'p1';
+            } else if (this.state.p2.score > this.state.p1.score) {
+                this.state.winner = 'p2';
+            } else {
+                this.state.winner = 'tie';
             }
+            this.triggerEndGame();
         }
 
         triggerEndGame() {
             const lobby = document.getElementById('lobby-ui');
             lobby.style.display = 'flex';
+            
+            let winText = this.state.winner === 'tie' ? "IT'S A TIE!" : `WINNER: ${this.state.winner.toUpperCase()}`;
+            
             lobby.innerHTML = `
                 <div class="title" style="color: #0f0;">RACE FINISHED</div>
-                <p>WINNER: ${this.state.winner.toUpperCase()}</p>
+                <p>${winText}</p>
+                <br>
+                <p style="font-size: 12px; color: #fff;">FINAL SCORE (STEPS)</p>
+                <p style="font-size: 10px; color: #0ff; margin-top: 5px;">P1: ${this.state.p1.score}</p>
+                <p style="font-size: 10px; color: #ff0055; margin-top: 5px;">P2: ${this.state.p2.score}</p>
                 <br>
                 <p style="font-size: 10px; color: #aaa;">Support the Oracle Node:</p>
                 <a href="https://buymeacoffee.com/brandonkennedy" target="_blank" class="btn-lobby" style="text-decoration: none; display: inline-block; border-color: #ffcc00; color: #ffcc00;">BUY ME A COFFEE ☕</a>
@@ -170,17 +182,11 @@
     const ctxOpp = document.getElementById('c-opp').getContext('2d');
     const alertLocal = document.getElementById('alert-local');
     const statusMsg = document.getElementById('status-msg');
-if (data.type === 'FORFEIT') {
-            game.isActive = false;
-            game.state.winner = myRole; // You win by default!
-            alert(data.msg);
-            game.triggerEndGame();
-        }
+
     let netcode = new RollbackNetcode();
     let game = new SprintGame(netcode);
     let myRole = ''; 
 
-    // The live server URL from your initial snippet
     const socket = new WebSocket('wss://zero-ping-oracle.onrender.com'); 
 
     socket.onopen = () => { 
@@ -218,6 +224,13 @@ if (data.type === 'FORFEIT') {
             game.processInput(oppRole, data.action);
         }
 
+        if (data.type === 'FORFEIT') {
+            game.isActive = false;
+            game.state.winner = myRole; // Automatic win
+            alert(data.msg);
+            game.triggerEndGame();
+        }
+
         if (data.type === 'ERROR') {
             alert(data.msg);
         }
@@ -252,7 +265,6 @@ if (data.type === 'FORFEIT') {
         socket.send(JSON.stringify({ type: 'INPUT', action: foot, frame: frame }));
     }
 
-    // Touch & Mouse listeners for cross-device support
     document.getElementById('btn-local-l').addEventListener('touchstart', (e) => handleFoot(e, 'L'), {passive: false});
     document.getElementById('btn-local-l').addEventListener('mousedown', (e) => handleFoot(e, 'L'));
     document.getElementById('btn-local-r').addEventListener('touchstart', (e) => handleFoot(e, 'R'), {passive: false});
@@ -272,11 +284,9 @@ if (data.type === 'FORFEIT') {
         let y = (ctx.canvas.height / 2);
         let bob = Math.sin(Date.now() / 80 * (speed/5)) * 5;
         
-        // Body
         ctx.fillRect(x, y + bob, 15, 15);
         ctx.fillRect(x + 5, y + 15 + bob, 5, 20);
         
-        // Legs
         let legSpread = Math.cos(Date.now() / 40 * (speed/5)) * 10;
         ctx.fillRect(x + 5 - legSpread, y + 35 + bob, 5, 15);
         ctx.fillRect(x + 5 + legSpread, y + 35 + bob, 5, 15);
@@ -296,25 +306,25 @@ if (data.type === 'FORFEIT') {
         [ctxLocal, ctxOpp].forEach((ctx, i) => {
             ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             
-            // Draw Ground Lines (Motion effect)
+            // Motion ground effect
             ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
             for(let j=0; j<10; j++) {
                 let lx = ((Date.now() / 2) + (j * 80)) % window.innerWidth;
                 ctx.fillRect(window.innerWidth - lx, ctx.canvas.height/2 + 50, 4, 15);
             }
 
-            // Draw Finish Line
-            let finishLineScreenX = FINISH_LINE_DISTANCE - camTarget;
-            if (finishLineScreenX < window.innerWidth && finishLineScreenX > 0) {
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(finishLineScreenX, ctx.canvas.height/2 - 20, 10, 80);
-            }
-
-            // Draw Runners
+            // Draw Runner
             let pState = (i === 0) ? myState : oppState;
             let drawX = pState.x - camTarget;
             drawRunner(ctx, drawX, pState.color, pState.v);
         });
+
+        // Draw HUD Timer on Local Canvas
+        let timeLeft = Math.max(0, ((RACE_DURATION_FRAMES - game.state.frame) / 60)).toFixed(1);
+        ctxLocal.fillStyle = '#ffcc00';
+        ctxLocal.font = '14px "Press Start 2P"';
+        ctxLocal.textAlign = 'center';
+        ctxLocal.fillText(`${timeLeft}s`, window.innerWidth / 2, 25);
 
         requestAnimationFrame(loop);
     }
