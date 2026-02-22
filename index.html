@@ -170,7 +170,12 @@
     const ctxOpp = document.getElementById('c-opp').getContext('2d');
     const alertLocal = document.getElementById('alert-local');
     const statusMsg = document.getElementById('status-msg');
-
+if (data.type === 'FORFEIT') {
+            game.isActive = false;
+            game.state.winner = myRole; // You win by default!
+            alert(data.msg);
+            game.triggerEndGame();
+        }
     let netcode = new RollbackNetcode();
     let game = new SprintGame(netcode);
     let myRole = ''; 
