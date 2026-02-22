@@ -80,8 +80,16 @@ wss.on('connection', (ws) => {
 
     ws.on('close', () => {
         if (ws.room && rooms[ws.room]) {
-            console.log(`[ORACLE] Match ${ws.room} Terminated.`);
-            delete rooms[ws.room]; // Kill the room if someone disconnects
+            const room = rooms[ws.room];
+            // Find the guy who didn't disconnect
+            const opponent = (ws.role === 'p1') ? room.p2 : room.p1;
+            
+            // Tell them they won by default
+            if (opponent && opponent.readyState === WebSocket.OPEN) {
+                opponent.send(JSON.stringify({ type: 'FORFEIT', msg: 'Opponent disconnected. YOU WIN.' }));
+            }
+            
+            console.log(`[ORACLE] Match ${ws.room} Terminated. Player dropped.`);
+            delete rooms[ws.room]; 
         }
     });
-});
