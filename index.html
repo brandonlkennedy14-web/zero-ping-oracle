@@ -175,11 +175,6 @@
 
     const socket = new WebSocket('wss://zero-ping-oracle.onrender.com'); 
 
-    socket.onopen = () => { 
-        statusMsg.innerText = "CONNECTED TO ORACLE."; 
-        statusMsg.style.color = "#0f0"; 
-    };
-
     socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
@@ -187,6 +182,48 @@
             myRole = 'p1';
             statusMsg.innerHTML = `ROOM CODE: <span style="color:#fff; font-size:24px;">${data.code}</span><br><br>SEND THIS TO PLAYER 2...`;
         }
+
+        if (data.type === 'START_PING_TEST') {
+            statusMsg.innerText = "HANDSHAKE: CALCULATING TOPOLOGY...";
+            // Kick off the first of 5 pings
+            netcode._pings = [];
+            netcode._deltas = [];
+            socket.send(JSON.stringify({ type: 'PING', clientTime: Date.now() }));
+        }
+
+        if (data.type === 'PONG') {
+            // Process the server's mirror bounce
+            netcode.processPong(data.clientTime, data.serverTime);
+        }
+
+        if (data.type === 'MATCH_START') {
+            document.getElementById('lobby-ui').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'block';
+            resize();
+
+            document.getElementById('hud-ping-local').innerText = `${myRole === 'p1' ? data.p1Ping : data.p2Ping}ms`;
+            document.getElementById('hud-ping-opp').innerText = `${myRole === 'p1' ? data.p2Ping : data.p1Ping}ms`;
+
+            game.startMatch();
+            loop();
+        }
+
+        if (data.type === 'OPPONENT_INPUT') {
+            let oppRole = myRole === 'p1' ? 'p2' : 'p1';
+            game.processInput(oppRole, data.action);
+        }
+
+        if (data.type === 'FORFEIT') {
+            game.isActive = false;
+            game.state.winner = myRole; 
+            alert(data.msg);
+            game.triggerEndGame();
+        }
+
+        if (data.type === 'ERROR') {
+            alert(data.msg);
+        }
+    };
 
         if (data.type === 'START_PING_TEST') {
             statusMsg.innerText = "HANDSHAKE: CALCULATING TOPOLOGY...";
