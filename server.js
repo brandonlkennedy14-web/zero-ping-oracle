@@ -38,20 +38,29 @@ wss.on('connection', (ws) => {
             }
         }
 
-        // 3. THE ORACLE HANDSHAKE (Ping Calculation)
-        if (data.type === 'PING_ECHO') {
-            // The client sends back the exact timestamp we sent them
-            const rtt = Date.now() - data.serverTime;
-            const room = rooms[ws.room];
-            
-            if (ws.role === 'p1') room.p1Ping = rtt;
-            if (ws.role === 'p2') room.p2Ping = rtt;
+        // 3. THE ORACLE HANDSHAKE (Standard Ping/Pong)
+        if (data.type === 'PING') {
+            // Instantly bounce the client's timestamp back, and attach the Server's current time
+            ws.send(JSON.stringify({ 
+                type: 'PONG', 
+                clientTime: data.clientTime, 
+                serverTime: Date.now() 
+            }));
+        }
 
-            // Once both pings are calculated, deploy the game!
+        if (data.type === 'PING_COMPLETE') {
+            const room = rooms[ws.room];
+            if (!room) return;
+
+            // Store the calculated ping sent by the client
+            if (ws.role === 'p1') room.p1Ping = data.ping;
+            if (ws.role === 'p2') room.p2Ping = data.ping;
+
+            // Once both clients finish their math, start the match!
             if (room.p1Ping > 0 && room.p2Ping > 0 && room.status === 'HANDSHAKE') {
                 room.status = 'PLAYING';
                 console.log(`[ORACLE] Match ${ws.room} LIVE. P1: ${room.p1Ping}ms | P2: ${room.p2Ping}ms`);
-                
+
                 const startMsg = JSON.stringify({
                     type: 'MATCH_START',
                     p1Ping: room.p1Ping,
@@ -61,23 +70,6 @@ wss.on('connection', (ws) => {
                 room.p2.send(startMsg);
             }
         }
-
-        // 4. IN-GAME DETERMINISTIC ROUTING
-        if (data.type === 'INPUT') {
-            const room = rooms[ws.room];
-            if(!room || room.status !== 'PLAYING') return;
-
-            // Instantly route the signed frame to the opponent for local rollback processing
-            const opponent = (ws.role === 'p1') ? room.p2 : room.p1;
-            opponent.send(JSON.stringify({
-                type: 'OPPONENT_INPUT',
-                action: data.action,
-                frame: data.frame,
-                hash: data.hash
-            }));
-        }
-    });
-
     ws.on('close', () => {
         if (ws.room && rooms[ws.room]) {
             const room = rooms[ws.room];
