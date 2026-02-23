@@ -28,9 +28,8 @@ wss.on('connection', (ws) => {
                 ws.room = data.code;
                 ws.role = 'p2';
                 room.status = 'HANDSHAKE';
-                
+
                 console.log(`[ORACLE] Match ${data.code} Initiating Handshake...`);
-                // Notify both players to begin the ping test
                 room.p1.send(JSON.stringify({ type: 'START_PING_TEST' }));
                 room.p2.send(JSON.stringify({ type: 'START_PING_TEST' }));
             } else {
@@ -40,7 +39,6 @@ wss.on('connection', (ws) => {
 
         // 3. THE ORACLE HANDSHAKE (Standard Ping/Pong)
         if (data.type === 'PING') {
-            // Instantly bounce the client's timestamp back, and attach the Server's current time
             ws.send(JSON.stringify({ 
                 type: 'PONG', 
                 clientTime: data.clientTime, 
@@ -52,11 +50,9 @@ wss.on('connection', (ws) => {
             const room = rooms[ws.room];
             if (!room) return;
 
-            // Store the calculated ping sent by the client
             if (ws.role === 'p1') room.p1Ping = data.ping;
             if (ws.role === 'p2') room.p2Ping = data.ping;
 
-            // Once both clients finish their math, start the match!
             if (room.p1Ping > 0 && room.p2Ping > 0 && room.status === 'HANDSHAKE') {
                 room.status = 'PLAYING';
                 console.log(`[ORACLE] Match ${ws.room} LIVE. P1: ${room.p1Ping}ms | P2: ${room.p2Ping}ms`);
@@ -70,17 +66,31 @@ wss.on('connection', (ws) => {
                 room.p2.send(startMsg);
             }
         }
+
+        // 4. IN-GAME DETERMINISTIC ROUTING
+        if (data.type === 'INPUT') {
+            const room = rooms[ws.room];
+            if(!room || room.status !== 'PLAYING') return;
+
+            const opponent = (ws.role === 'p1') ? room.p2 : room.p1;
+            opponent.send(JSON.stringify({
+                type: 'OPPONENT_INPUT',
+                action: data.action,
+                frame: data.frame,
+                hash: data.hash
+            }));
+        }
+    });
+
     ws.on('close', () => {
         if (ws.room && rooms[ws.room]) {
             const room = rooms[ws.room];
-            // Find the guy who didn't disconnect
             const opponent = (ws.role === 'p1') ? room.p2 : room.p1;
-            
-            // Tell them they won by default
+
             if (opponent && opponent.readyState === WebSocket.OPEN) {
                 opponent.send(JSON.stringify({ type: 'FORFEIT', msg: 'Opponent disconnected. YOU WIN.' }));
             }
-            
+
             console.log(`[ORACLE] Match ${ws.room} Terminated. Player dropped.`);
             delete rooms[ws.room]; 
         }
