@@ -68,7 +68,7 @@
     </div>
 
 <script>
-    // ==========================================
+    // // ==========================================
     // 1. ENGINE CLASSES (Netcode & Pure Ledger Logic)
     // ==========================================
     class RollbackNetcode {
@@ -77,52 +77,38 @@
             this.timeDelta = 0;
             this.fps = 60;
             this.frameDuration = 1000 / this.fps;
+            
+            // Temporary arrays for the handshake math
+            this._pings = [];
+            this._deltas = [];
         }
-        
+
+        processPong(clientSentTime, serverTime) {
+            let receiveTime = Date.now();
+            let rtt = receiveTime - clientSentTime;
+            let oneWay = rtt / 2;
+
+            this._pings.push(rtt);
+            // Difference between our clock and the server's clock
+            this._deltas.push(serverTime - (clientSentTime + oneWay)); 
+
+            // Once we get 5 pongs, average them out and tell the server we are ready
+            if (this._pings.length === 5) {
+                this.ping = Math.round(this._pings.reduce((a, b) => a + b) / 5);
+                this.timeDelta = this._deltas.reduce((a, b) => a + b) / 5;
+                
+                statusMsg.innerText = "TOPOLOGY CALCULATED. WAITING FOR OPPONENT...";
+                socket.send(JSON.stringify({ type: 'PING_COMPLETE', ping: this.ping }));
+            } else {
+                // Send the next ping
+                socket.send(JSON.stringify({ type: 'PING', clientTime: Date.now() }));
+            }
+        }
+
         getSyncedFrame() {
             return Math.floor((Date.now() + this.timeDelta) / this.frameDuration);
         }
     }
-
-    const RACE_DURATION_FRAMES = 600; // 10 seconds at 60fps
-
-    class SprintGame {
-        constructor(netcodeEngine) {
-            this.netcode = netcodeEngine;
-            this.isActive = false;
-            
-            this.state = {
-                frame: 0,
-                // Score is the pure integer ledger. v and x are just for visual juice.
-                p1: { score: 0, x: 50, v: 0, nextFoot: 'L', color: '#0ff' },
-                p2: { score: 0, x: 50, v: 0, nextFoot: 'L', color: '#ff0055' },
-                winner: null
-            };
-
-            this.BOOST = 12;
-            this.FRICTION = 0.94;
-            this.STUMBLE_PENALTY = 0.2;
-        }
-
-        startMatch() {
-            this.isActive = true;
-            this.state.frame = 0; // Reset frame counter for strictly timed match
-        }
-
-        processInput(playerKey, action) {
-            let p = this.state[playerKey];
-            if (action === 'L' || action === 'R') {
-                if (action === p.nextFoot) {
-                    p.score += 1; // Immutable ledger point
-                    p.v += this.BOOST; // Visual feedback
-                    p.nextFoot = (action === 'L') ? 'R' : 'L';
-                    return true;
-                } else {
-                    p.v *= this.STUMBLE_PENALTY; // Visual penalty
-                    return false; 
-                }
-            }
-        }
 
         step() {
             if (!this.isActive) return;
