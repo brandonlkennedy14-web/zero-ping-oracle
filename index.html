@@ -68,7 +68,7 @@
     </div>
 
 <script>
-    // // ==========================================
+    // ==========================================
     // 1. ENGINE CLASSES (Netcode & Pure Ledger Logic)
     // ==========================================
     class RollbackNetcode {
@@ -78,7 +78,6 @@
             this.fps = 60;
             this.frameDuration = 1000 / this.fps;
             
-            // Temporary arrays for the handshake math
             this._pings = [];
             this._deltas = [];
         }
@@ -89,18 +88,15 @@
             let oneWay = rtt / 2;
 
             this._pings.push(rtt);
-            // Difference between our clock and the server's clock
             this._deltas.push(serverTime - (clientSentTime + oneWay)); 
 
-            // Once we get 5 pongs, average them out and tell the server we are ready
             if (this._pings.length === 5) {
                 this.ping = Math.round(this._pings.reduce((a, b) => a + b) / 5);
                 this.timeDelta = this._deltas.reduce((a, b) => a + b) / 5;
                 
-                statusMsg.innerText = "TOPOLOGY CALCULATED. WAITING FOR OPPONENT...";
+                document.getElementById('status-msg').innerText = "TOPOLOGY CALCULATED. WAITING FOR OPPONENT...";
                 socket.send(JSON.stringify({ type: 'PING_COMPLETE', ping: this.ping }));
             } else {
-                // Send the next ping
                 socket.send(JSON.stringify({ type: 'PING', clientTime: Date.now() }));
             }
         }
@@ -110,17 +106,54 @@
         }
     }
 
+    const RACE_DURATION_FRAMES = 600; 
+
+    class SprintGame {
+        constructor(netcodeEngine) {
+            this.netcode = netcodeEngine;
+            this.isActive = false;
+
+            this.state = {
+                frame: 0,
+                p1: { score: 0, x: 50, v: 0, nextFoot: 'L', color: '#0ff' },
+                p2: { score: 0, x: 50, v: 0, nextFoot: 'L', color: '#ff0055' },
+                winner: null
+            };
+
+            this.BOOST = 12;
+            this.FRICTION = 0.94;
+            this.STUMBLE_PENALTY = 0.2;
+        }
+
+        startMatch() {
+            this.isActive = true;
+            this.state.frame = 0; 
+        }
+
+        processInput(playerKey, action) {
+            let p = this.state[playerKey];
+            if (action === 'L' || action === 'R') {
+                if (action === p.nextFoot) {
+                    p.score += 1; 
+                    p.v += this.BOOST; 
+                    p.nextFoot = (action === 'L') ? 'R' : 'L';
+                    return true;
+                } else {
+                    p.v *= this.STUMBLE_PENALTY; 
+                    return false; 
+                }
+            }
+        }
+
         step() {
             if (!this.isActive) return;
             this.state.frame++;
-            
-            // Visual smoothing for the canvas
+
             this.state.p1.v *= this.FRICTION;
             this.state.p1.x += this.state.p1.v;
             this.state.p2.v *= this.FRICTION;
             this.state.p2.x += this.state.p2.v;
 
-            // Strict time-based resolution
             if (this.state.frame >= RACE_DURATION_FRAMES) {
                 this.resolveMatch();
             }
@@ -141,9 +174,9 @@
         triggerEndGame() {
             const lobby = document.getElementById('lobby-ui');
             lobby.style.display = 'flex';
-            
+
             let winText = this.state.winner === 'tie' ? "IT'S A TIE!" : `WINNER: ${this.state.winner.toUpperCase()}`;
-            
+
             lobby.innerHTML = `
                 <div class="title" style="color: #0f0;">RACE FINISHED</div>
                 <p>${winText}</p>
@@ -175,6 +208,11 @@
 
     const socket = new WebSocket('wss://zero-ping-oracle.onrender.com'); 
 
+    socket.onopen = () => { 
+        statusMsg.innerText = "CONNECTED TO ORACLE."; 
+        statusMsg.style.color = "#0f0"; 
+    };
+
     socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
@@ -185,14 +223,12 @@
 
         if (data.type === 'START_PING_TEST') {
             statusMsg.innerText = "HANDSHAKE: CALCULATING TOPOLOGY...";
-            // Kick off the first of 5 pings
             netcode._pings = [];
             netcode._deltas = [];
             socket.send(JSON.stringify({ type: 'PING', clientTime: Date.now() }));
         }
 
         if (data.type === 'PONG') {
-            // Process the server's mirror bounce
             netcode.processPong(data.clientTime, data.serverTime);
         }
 
@@ -216,40 +252,6 @@
         if (data.type === 'FORFEIT') {
             game.isActive = false;
             game.state.winner = myRole; 
-            alert(data.msg);
-            game.triggerEndGame();
-        }
-
-        if (data.type === 'ERROR') {
-            alert(data.msg);
-        }
-    };
-
-        if (data.type === 'START_PING_TEST') {
-            statusMsg.innerText = "HANDSHAKE: CALCULATING TOPOLOGY...";
-            socket.send(JSON.stringify({ type: 'PING_ECHO', serverTime: Date.now() }));
-        }
-
-        if (data.type === 'MATCH_START') {
-            document.getElementById('lobby-ui').style.display = 'none';
-            document.getElementById('game-ui').style.display = 'block';
-            resize();
-            
-            document.getElementById('hud-ping-local').innerText = `${myRole === 'p1' ? data.p1Ping : data.p2Ping}ms`;
-            document.getElementById('hud-ping-opp').innerText = `${myRole === 'p1' ? data.p2Ping : data.p1Ping}ms`;
-            
-            game.startMatch();
-            loop();
-        }
-
-        if (data.type === 'OPPONENT_INPUT') {
-            let oppRole = myRole === 'p1' ? 'p2' : 'p1';
-            game.processInput(oppRole, data.action);
-        }
-
-        if (data.type === 'FORFEIT') {
-            game.isActive = false;
-            game.state.winner = myRole; // Automatic win
             alert(data.msg);
             game.triggerEndGame();
         }
@@ -306,10 +308,10 @@
         ctx.fillStyle = color;
         let y = (ctx.canvas.height / 2);
         let bob = Math.sin(Date.now() / 80 * (speed/5)) * 5;
-        
+
         ctx.fillRect(x, y + bob, 15, 15);
         ctx.fillRect(x + 5, y + 15 + bob, 5, 20);
-        
+
         let legSpread = Math.cos(Date.now() / 40 * (speed/5)) * 10;
         ctx.fillRect(x + 5 - legSpread, y + 35 + bob, 5, 15);
         ctx.fillRect(x + 5 + legSpread, y + 35 + bob, 5, 15);
@@ -328,7 +330,7 @@
 
         [ctxLocal, ctxOpp].forEach((ctx, i) => {
             ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            
+
             // Motion ground effect
             ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
             for(let j=0; j<10; j++) {
